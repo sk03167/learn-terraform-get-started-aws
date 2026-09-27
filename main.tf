@@ -30,7 +30,7 @@ resource "aws_cloudwatch_metric_alarm" "gold_data_loss_alarm" {
   evaluation_periods  = "1"
   metric_name         = "NumberOfObjects"
   namespace           = "AWS/S3"
-  period              = "86400" # Evaluated across 24h
+  period              = "3600" # Evaluated across 24h
   statistic           = "Average"
   threshold           = "1" # Triggers immediately if data count breaks zero bounds
   alarm_description   = "Fires instantly if files inside the production Gold layer are dropped or deleted."
