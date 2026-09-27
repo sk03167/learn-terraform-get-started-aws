@@ -1,12 +1,12 @@
 # 1. Instantiate the modular architecture
 module "dev_data_lake" {
   source      = "./modules/data_lake"
-  environment = "dev"
+  environment = terraform.workspace
 }
 
 # 2. Secret Isolation: Securely vault operational passwords
 resource "aws_secretsmanager_secret" "db_secret" {
-  name                    = "dev-lakehouse-db-credentials"
+ name                    = "${terraform.workspace}-lakehouse-db-credentials" # 👈 DYNAMIC NAME
   recovery_window_in_days = 0
 }
 
@@ -25,7 +25,7 @@ resource "aws_sns_topic" "data_ops_alerts" {
 
 # 4. Proactive Alerting: CloudWatch Alarm tracking production gold tier integrity
 resource "aws_cloudwatch_metric_alarm" "gold_data_loss_alarm" {
-  alarm_name          = "prod-gold-bucket-integrity-alert"
+  alarm_name          = "${terraform.workspace}-gold-bucket-integrity-alert"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = "1"
   metric_name         = "NumberOfObjects"
@@ -37,7 +37,7 @@ resource "aws_cloudwatch_metric_alarm" "gold_data_loss_alarm" {
   alarm_actions       = [aws_sns_topic.data_ops_alerts.arn]
 
   dimensions = {
-    BucketName = "lead-de-dev-gold-data"
+    BucketName = "lead-de-${terraform.workspace}-gold-data"
     FilterId   = "EntireBucket"
   }
 }
