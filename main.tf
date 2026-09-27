@@ -6,7 +6,7 @@ module "dev_data_lake" {
 
 # 2. Secret Isolation: Securely vault operational passwords
 resource "aws_secretsmanager_secret" "db_secret" {
- name                    = "${terraform.workspace}-lakehouse-db-credentials" # 👈 DYNAMIC NAME
+  name                    = "${terraform.workspace}-lakehouse-db-credentials" # 👈 DYNAMIC NAME
   recovery_window_in_days = 0
 }
 
