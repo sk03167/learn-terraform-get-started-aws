@@ -5,6 +5,7 @@ variable "environment" {
 
 variable "lake_layers" {
   type        = list(string)
-  default     = ["bronze", "silver", "gold"]
+  default     = ["bronze", "silver", "gold", "platinum"] # 👈 ADDED PLATINUM HERE
   description = "Medallion data architecture tiers"
 }
+
