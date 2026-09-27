@@ -1,0 +1,42 @@
+name: "Terraform Data Platform CI/CD"
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  terraform:
+    name: "Automated Architecture Quality Controls"
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: "us-east-1"
+      TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform Engine
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.7.0
+
+      - name: Enforce Coding Standards (Format Check)
+        run: terraform fmt -check -recursive
+
+      - name: Initialize & Validate Configuration Syntax
+        run: |
+          terraform init
+          terraform validate -no-color
+
+      - name: Preview Infrastructure Impact (Plan)
+        if: github.event_name == 'pull_request'
+        run: terraform plan -no-color
+
+      - name: Execute Verified Deployments (Apply)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve -no-color
