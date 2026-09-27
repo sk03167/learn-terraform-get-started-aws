@@ -7,12 +7,12 @@ terraform {
     }
   }
   backend "s3" {
-  bucket         = "lead-de-global-tfstate-bucket" # Must be globally unique, change 'yourname'
-  key            = "data-platform/dev/terraform.tfstate"
-  region         = "us-east-1"
-  encrypt        = true
-  dynamodb_table = "terraform-state-lock"
-}
+    bucket         = "lead-de-global-tfstate-bucket" # Must be globally unique, change 'yourname'
+    key            = "data-platform/dev/terraform.tfstate"
+    region         = "us-east-1"
+    encrypt        = true
+    dynamodb_table = "terraform-state-lock"
+  }
 
 }
 
