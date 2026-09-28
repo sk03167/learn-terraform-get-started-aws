@@ -12,6 +12,9 @@ on:
       - staging
       - main
 
+permissions:
+  contents: read
+
 jobs:
   terraform:
     name: "Data Infrastructure Deployment Pipeline"
@@ -34,11 +37,8 @@ jobs:
       - name: Terraform Format Check
         run: terraform fmt -check -recursive
 
-      - name: Terraform Init
-        run: terraform init -no-color
-
-      # 🧠 LEAD STEP: Map the active Git branch to the corresponding Terraform Workspace
-      - name: Select Active Workspace
+      # Map the PR base branch or pushed branch to an explicit deployment environment.
+      - name: Select target environment
         run: |
           if [ "${{ github.base_ref }}" = "main" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
             echo "TARGET_ENV=prod" >> $GITHUB_ENV
@@ -48,17 +48,18 @@ jobs:
             echo "TARGET_ENV=dev" >> $GITHUB_ENV
           fi
 
-      # Switch or create the dynamic workspace securely inside the runner
-      - name: Switch Workspace
+      # State is isolated by backend key, rather than by a runner-local workspace.
+      - name: Terraform Init
         run: |
-          terraform workspace select ${{ env.TARGET_ENV }} || terraform workspace new ${{ env.TARGET_ENV }}
+          terraform init -no-color -reconfigure \
+            -backend-config="key=data-platform/${TARGET_ENV}/terraform.tfstate"
 
       # 🔍 Automated Quality Control: Run Plan previews on all Pull Requests
       - name: Terraform Plan Preview
         if: github.event_name == 'pull_request'
-        run: terraform plan -no-color
+        run: terraform plan -no-color -input=false -var-file="environments/${TARGET_ENV}.tfvars"
 
       # ⚡ Production-Grade Isolation: Apply changes ONLY during direct pushes/merges to target tracks
       - name: Terraform Automated Apply
         if: github.event_name == 'push'
-        run: terraform apply -auto-approve -no-color
+        run: terraform apply -auto-approve -no-color -input=false -var-file="environments/${TARGET_ENV}.tfvars"

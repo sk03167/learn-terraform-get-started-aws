@@ -64,15 +64,15 @@ resource "aws_s3_bucket_metric" "bucket_metrics" {
 ```
 
 ### 3. `main.tf` (Dynamic Workspace Isolation & Alerting)
-Leverages the **`terraform.workspace`** parameter to isolate resource naming structures dynamically across platforms. It ensures strict secret isolation using AWS Secrets Manager to vault credentials, and wires up CloudWatch Metric Alarms alongside SNS alerting topics to track Gold layer integrity.
+Leverages the **`var.environment`** parameter to isolate resource naming structures dynamically across platforms. It ensures strict secret isolation using AWS Secrets Manager to vault credentials, and wires up CloudWatch Metric Alarms alongside SNS alerting topics to track Gold layer integrity.
 ```hcl
 module "data_lake" {
   source      = "./modules/data_lake"
-  environment = terraform.workspace # Dev, Staging, or Prod mapped at runtime
+  environment = var.environment # Dev, Staging, or Prod mapped at runtime
 }
 
 resource "aws_secretsmanager_secret" "db_secret" {
-  name                    = "${terraform.workspace}-lakehouse-db-credentials"
+  name                    = "${var.environment}-lakehouse-db-credentials"
   recovery_window_in_days = 0 
 }
 
@@ -81,10 +81,10 @@ resource "aws_secretsmanager_secret_version" "db_secret_val" {
   secret_string = jsonencode({ username = "lakehouse_admin", password = var.db_password })
 }
 
-resource "aws_sns_topic" "data_ops_alerts" { name = "${terraform.workspace}-data-ops-alerts" }
+resource "aws_sns_topic" "data_ops_alerts" { name = "${var.environment}-data-ops-alerts" }
 
 resource "aws_cloudwatch_metric_alarm" "gold_data_loss_alarm" {
-  alarm_name          = "${terraform.workspace}-gold-bucket-integrity-alert"
+  alarm_name          = "${var.environment}-gold-bucket-integrity-alert"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = "1"
   metric_name         = "NumberOfObjects"
@@ -93,7 +93,7 @@ resource "aws_cloudwatch_metric_alarm" "gold_data_loss_alarm" {
   statistic           = "Average"
   threshold           = "1"
   alarm_actions       = [aws_sns_topic.data_ops_alerts.arn]
-  dimensions          = { BucketName = "lead-de-${terraform.workspace}-gold-data", FilterId = "EntireBucket" }
+  dimensions          = { BucketName = "lead-de-${var.environment}-gold-data", FilterId = "EntireBucket" }
 }
 ```
 
