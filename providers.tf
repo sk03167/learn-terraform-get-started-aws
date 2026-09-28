@@ -5,13 +5,13 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    databricks = { 
+    databricks = {
       source  = "databricks/databricks" # Official Databricks source
-      version = "~> 1.0" 
+      version = "~> 1.0"
     }
-    snowflake = { 
+    snowflake = {
       source  = "snowflakedb/snowflake" # Official, up-to-date Snowflake source
-      version = "~> 1.0" 
+      version = "~> 1.0"
     }
   }
   backend "s3" {
