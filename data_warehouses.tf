@@ -25,6 +25,6 @@ resource "databricks_cluster_policy" "fair_share_policy" {
   name  = "${terraform.workspace}-data-science-policy"
   definition = jsonencode({
     "spark_version" : { "type" : "fixed", "value" : "auto" },
-    "node_type_id"  : { "type" : "enum",  "values" : ["m5.xlarge", "r5.xlarge"] }
+    "node_type_id" : { "type" : "enum", "values" : ["m5.xlarge", "r5.xlarge"] }
   })
 }
