@@ -9,10 +9,6 @@ terraform {
       source  = "databricks/databricks" # Official Databricks source
       version = "~> 1.0"
     }
-    snowflake = {
-      source  = "snowflakedb/snowflake" # Official, up-to-date Snowflake source
-      version = "~> 1.0"
-    }
   }
   backend "s3" {
     bucket         = "lead-de-global-tfstate-bucket" # Must be globally unique, change 'yourname'
