@@ -30,7 +30,7 @@ resource "aws_route_table_association" "private_assoc" {
 # 4. S3 VPC Gateway Endpoint (Routes traffic internally to your S3 storage tiers)
 resource "aws_vpc_endpoint" "s3_endpoint" {
   vpc_id            = aws_vpc.data_platform_vpc.id
-  service_name      = "com.amazonaws.us-east-1s3"
+  service_name      = "com.amazonaws.us-east-1.s3"
   vpc_endpoint_type = "Gateway"
   route_table_ids   = [aws_route_table.private_rt.id]
   tags              = { Name = "${terraform.workspace}-s3-vpc-endpoint" }
