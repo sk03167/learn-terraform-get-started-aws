@@ -1,11 +1,10 @@
 variable "environment" {
   type        = string
-  description = "Target deployment workspace (dev, staging, prod)"
+  description = "Explicit resource configuration target (dev, staging, prod)."
 }
 
 variable "lake_layers" {
   type        = list(string)
-  default     = ["bronze", "silver", "gold", "platinum"] # 👈 ADDED PLATINUM HERE
+  default     = ["bronze", "silver", "gold"] # 👈 ADDED PLATINUM HERE
   description = "Medallion data architecture tiers"
 }
-
