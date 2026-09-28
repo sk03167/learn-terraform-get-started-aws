@@ -48,11 +48,14 @@ jobs:
             echo "TARGET_ENV=dev" >> $GITHUB_ENV
           fi
 
-      # State is isolated by backend key, rather than by a runner-local workspace.
       - name: Terraform Init
+        run: terraform init -no-color
+
+      # Workspaces partition the shared backend state. The tfvars file below
+      # separately makes the resource configuration explicit.
+      - name: Select Terraform workspace
         run: |
-          terraform init -no-color -reconfigure \
-            -backend-config="key=data-platform/${TARGET_ENV}/terraform.tfstate"
+          terraform workspace select "$TARGET_ENV" || terraform workspace new "$TARGET_ENV"
 
       # 🔍 Automated Quality Control: Run Plan previews on all Pull Requests
       - name: Terraform Plan Preview
