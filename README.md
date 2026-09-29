@@ -12,6 +12,7 @@ learn-terraform-get-started-aws/
 │   └── terraform-ci.yml      # CI/CD engine with Git branch-to-workspace auto-mapping
 ├── environments/             # Explicit dev, staging, and prod input values
 ├── modules/
+│   ├── artifact_bucket/      # Versioned, encrypted Glue code-artifact storage
 │   └── data_lake/
 │       ├── main.tf           # Loop-driven logic building dynamic storage tiers
 │       └── variables.tf      # Modular input configurations
@@ -74,7 +75,7 @@ module "data_lake" {
 
 resource "aws_secretsmanager_secret" "db_secret" {
   name                    = "${var.environment}-lakehouse-db-credentials"
-  recovery_window_in_days = 0 
+  recovery_window_in_days = var.environment == "dev" ? 0 : 7
 }
 
 resource "aws_secretsmanager_secret_version" "db_secret_val" {
@@ -118,6 +119,87 @@ Automates platform deployment governance using shell-mapping criteria to identif
       - name: Terraform Plan Preview
         run: terraform plan -var-file="environments/${{ env.TARGET_ENV }}.tfvars"
 ```
+
+### 5. `modules/artifact_bucket` (Deployable Code Storage)
+The data-jobs repository builds two deployable pieces: a Python wheel containing
+reusable pipeline code and a small Glue entry script. This module creates a
+separate bucket for those artifacts instead of mixing them with Bronze/Silver/
+Gold data:
+
+```text
+lead-de-dev-artifacts
+lead-de-staging-artifacts
+lead-de-prod-artifacts
+```
+
+The bucket blocks public access, enables versioning, uses S3-managed encryption,
+and permits `force_destroy` only in `dev`. Its name and ARN are module outputs
+so a later GitHub OIDC publishing role can receive access to this one bucket
+rather than broad S3 permissions.
+
+---
+
+## 🧭 Infrastructure Learning Path and Decisions
+
+### From implicit workspaces to explicit environment inputs
+The first version used `terraform.workspace` both to isolate state and to name
+resources. That worked for a small lab, but it made resource configuration
+depend on hidden CLI state: the same command could describe a different
+environment if the wrong workspace was selected.
+
+The current design separates the concerns:
+
+```text
+Terraform workspace  → isolates remote state
+environment tfvars    → explicitly selects resource configuration
+```
+
+Each environment file sets `environment = "dev"`, `"staging"`, or `"prod"`.
+Resources use `var.environment`; workspaces remain in the workflow to keep
+their state files separate. This makes a plan reviewable from its command line:
+
+```bash
+terraform workspace select dev
+terraform plan -var-file=environments/dev.tfvars
+```
+
+### Branches are deployment tracks, not merely labels
+Terraform CI maps a PR base branch or a direct push to one matching workspace
+and `.tfvars` file:
+
+```text
+feature PR → dev     → dev workspace + environments/dev.tfvars
+dev → staging         → staging workspace + environments/staging.tfvars
+staging → main        → prod workspace + environments/prod.tfvars
+```
+
+Pull requests run a plan. A merge/direct push to the target track runs the
+apply. This is why the Glue artifact bucket was planned on a feature branch,
+merged to `dev`, and created by the `dev` deployment pipeline rather than by a
+manual apply.
+
+### A source-control lesson: deployed is not the same as merged
+While adding the artifact bucket, a plan against `feat/add_vpc` showed
+`No changes`: its explicit-environment and VPC configuration had already been
+applied to `dev`. The same configuration was missing from `main`, however.
+
+The correct fix was not to deploy the older `main` configuration again. The
+branch was first promoted into `main`, then the artifact-bucket feature was
+rebased onto that baseline. This preserved a one-to-one relationship between
+the deployed state, the approved branch history, and future plans.
+
+### Artifact delivery boundary
+The data-jobs repository now lint-tests-builds the Glue script and wheel in CI,
+then stores a short-lived GitHub Actions artifact for inspection. This Terraform
+repository now provides the dev artifact bucket. The next step is restricted
+GitHub OIDC publishing from `main` into immutable Git-SHA paths, followed by a
+Glue job that pins an exact published artifact.
+
+### Known backend follow-up
+Terraform currently warns that the S3 backend `dynamodb_table` parameter is
+deprecated. State locking still works today; a future maintenance change should
+migrate the backend to `use_lockfile` after confirming the team no longer needs
+the DynamoDB lock table.
 
 ---
 
