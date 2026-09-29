@@ -3,6 +3,10 @@ module "data_lake" {
   source      = "./modules/data_lake"
   environment = var.environment
 }
+module "glue_artifacts" {
+  source      = "./modules/artifact_bucket"
+  environment = var.environment
+}
 
 # 2. Secret Isolation: Securely vault operational passwords
 resource "aws_secretsmanager_secret" "db_secret" {
