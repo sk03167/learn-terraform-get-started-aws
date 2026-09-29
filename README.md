@@ -1,6 +1,6 @@
 # 🏛️ Multi-Environment Medallion Data Platform Foundation
 
-This repository contains a production-grade infrastructure blueprint designed to manage a secure, multi-environment Data Lakehouse architecture on AWS. It implements advanced Infrastructure as Code (IaC) principles, dynamic environment workspaces, automated secrets management, proactive alerting, and an integrated multi-branch GitOps CI/CD automation engine.
+This repository is a learning-oriented AWS data-platform foundation. Terraform workspaces isolate state for `dev`, `staging`, and `prod`, while explicit environment files control resource names and configuration.
 
 ---
 
@@ -10,12 +10,13 @@ This repository contains a production-grade infrastructure blueprint designed to
 learn-terraform-get-started-aws/
 ├── .github/workflows/
 │   └── terraform-ci.yml      # CI/CD engine with Git branch-to-workspace auto-mapping
+├── environments/             # Explicit dev, staging, and prod input values
 ├── modules/
 │   └── data_lake/
 │       ├── main.tf           # Loop-driven logic building dynamic storage tiers
 │       └── variables.tf      # Modular input configurations
 ├── .gitignore                # Protects secrets from leaking to GitHub
-├── main.tf                   # Orchestration blueprint (Secrets, Monitors, dynamic workspace tags)
+├── main.tf                   # Secrets, alerts, and environment-specific resource configuration
 ├── providers.tf              # Provider settings, Remote S3 Backend, and State Locking
 ├── variables.tf              # Sensitive variable schemas
 └── terraform.tfvars          # Local secret values (Never Committed)
@@ -26,7 +27,7 @@ learn-terraform-get-started-aws/
 ## 🛠️ Code Deep Dive & Operational Rationale
 
 ### 1. `providers.tf` (Global Strategy & Remote State Backend)
-Defines the structural settings and implements a **Shared Cloud Backend**. By pointing tracking files to S3 and setting up a locking table, this allows collaborative engineering teams to work safely out of a single source of truth without concurrent deployment conflicts.
+Defines the shared S3 backend. Workspaces partition its state, while environment `.tfvars` files explicitly set values used by resources.
 ```hcl
 terraform {
   required_version = ">= 1.5.0"
@@ -36,7 +37,7 @@ terraform {
 
   backend "s3" {
     bucket         = "lead-de-global-tfstate-bucket" 
-    key            = "data-platform/dev/terraform.tfstate"
+    key            = "data-platform/terraform.tfstate"
     region         = "us-east-1"
     encrypt        = true
     dynamodb_table = "terraform-state-lock" 
@@ -47,12 +48,12 @@ provider "aws" { region = "us-east-1" }
 ```
 
 ### 2. `modules/data_lake/main.tf` (Modular Abstraction Engine)
-Eliminates copy-pasted block redundancies. It uses dynamic loop operators (`for_each`) to iterate through your medallion layers, implementing condition mappings (such as safety rules where `force_destroy` runs exclusively on non-production targets to shield live enterprise datasets).
+Eliminates copy-pasted block redundancies. It iterates through the medallion layers and applies public-access blocking, versioning, encryption, and lifecycle protection. Only dev permits forced deletion.
 ```hcl
 resource "aws_s3_bucket" "lake_bucket" {
   for_each      = toset(var.lake_layers)
   bucket        = "lead-de-${var.environment}-${each.value}-data"
-  force_destroy = var.environment == "prod" ? false : true # Protect prod data at all costs!
+  force_destroy = var.environment == "dev"
   tags          = { Environment = var.environment, Layer = each.value, ManagedBy = "Terraform" }
 }
 
@@ -63,16 +64,16 @@ resource "aws_s3_bucket_metric" "bucket_metrics" {
 }
 ```
 
-### 3. `main.tf` (Dynamic Workspace Isolation & Alerting)
-Leverages the **`terraform.workspace`** parameter to isolate resource naming structures dynamically across platforms. It ensures strict secret isolation using AWS Secrets Manager to vault credentials, and wires up CloudWatch Metric Alarms alongside SNS alerting topics to track Gold layer integrity.
+### 3. `main.tf` (Explicit Environment Configuration & Alerting)
+Uses `var.environment`, supplied by an environment `.tfvars` file, for resource naming. The selected Terraform workspace remains responsible only for state isolation.
 ```hcl
 module "data_lake" {
   source      = "./modules/data_lake"
-  environment = terraform.workspace # Dev, Staging, or Prod mapped at runtime
+  environment = var.environment
 }
 
 resource "aws_secretsmanager_secret" "db_secret" {
-  name                    = "${terraform.workspace}-lakehouse-db-credentials"
+  name                    = "${var.environment}-lakehouse-db-credentials"
   recovery_window_in_days = 0 
 }
 
@@ -81,26 +82,26 @@ resource "aws_secretsmanager_secret_version" "db_secret_val" {
   secret_string = jsonencode({ username = "lakehouse_admin", password = var.db_password })
 }
 
-resource "aws_sns_topic" "data_ops_alerts" { name = "${terraform.workspace}-data-ops-alerts" }
+resource "aws_sns_topic" "data_ops_alerts" { name = "${var.environment}-data-ops-alerts" }
 
 resource "aws_cloudwatch_metric_alarm" "gold_data_loss_alarm" {
-  alarm_name          = "${terraform.workspace}-gold-bucket-integrity-alert"
+  alarm_name          = "${var.environment}-gold-bucket-integrity-alert"
   comparison_operator = "LessThanThreshold"
   evaluation_periods  = "1"
   metric_name         = "NumberOfObjects"
   namespace           = "AWS/S3"
-  period              = "3600"
+  period              = "86400"
   statistic           = "Average"
   threshold           = "1"
   alarm_actions       = [aws_sns_topic.data_ops_alerts.arn]
-  dimensions          = { BucketName = "lead-de-${terraform.workspace}-gold-data", FilterId = "EntireBucket" }
+  dimensions          = { BucketName = "lead-de-${var.environment}-gold-data", StorageType = "AllStorageTypes" }
 }
 ```
 
 ### 4. `.github/workflows/terraform-ci.yml` (GitOps Multi-Branch CI/CD Pipeline)
 Automates platform deployment governance using shell-mapping criteria to identify active base branches (`dev`, `staging`, `main`), match them immediately to the correct **Terraform Workspace**, and isolate the infrastructure blast radius:
 ```yaml
-      # Automatically maps the active Git branch to the corresponding Terraform Workspace
+      # Map the active branch to a workspace and matching explicit input file.
       - name: Select Active Workspace
         run: |
           if [ "${{ github.base_ref }}" = "main" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
@@ -113,6 +114,9 @@ Automates platform deployment governance using shell-mapping criteria to identif
 
       - name: Switch Workspace
         run: terraform workspace select ${{ env.TARGET_ENV }} || terraform workspace new ${{ env.TARGET_ENV }}
+
+      - name: Terraform Plan Preview
+        run: terraform plan -var-file="environments/${{ env.TARGET_ENV }}.tfvars"
 ```
 
 ---
@@ -129,7 +133,7 @@ aws s3api put-bucket-versioning --bucket lead-de-global-tfstate-bucket --version
 ### 🔀 2. Multi-Branch Progression Model
 To deploy updates securely without configuration drift, code modifications must flow sequentially up the environment branch ladder:
 1. Developer cuts a local branch from `dev` (`feat/change-parameters`).
-2. Open a Pull Request on GitHub matching **`base: dev`** ➡️ `terraform plan` executes against the **Dev Workspace** to preview structural impact.
+2. Open a Pull Request targeting **`dev`** ➡️ CI selects the **Dev Workspace** and passes `environments/dev.tfvars` to `terraform plan`.
 3. PR Merge to `dev` triggers `terraform apply` ➡️ updates roll out exclusively onto your Dev cloud assets.
 4. Promote verified code from `dev` ➡️ `staging` branch via a new PR, which runs checks against the isolated **Staging Workspace** partition (`env:/staging/...`).
 5. Final promotion from `staging` ➡️ `main` releases the fully validated updates cleanly onto the production architecture track.
@@ -142,18 +146,18 @@ aws s3 rb s3://lead-de-dev-bronze-data --force
 
 # 2. Audit reality against the code blueprint
 terraform workspace select dev
-terraform plan  # Identifies that the S3 asset and its metadata metric loops are missing
+terraform plan -var-file=environments/dev.tfvars
 
 # 3. Heal the environment instantly
-terraform apply -auto-approve # Rebuilds the infrastructure target blocks automatically
+terraform apply -var-file=environments/dev.tfvars
 ```
 
 ### 🧼 4. Complete Environment Teardown
 To practice sound resource cost optimization controls and prevent running up unexpected cloud utility fees when testing architectures, completely erase temporary environments using the teardown sequence:
 ```bash
-terraform workspace select dev && terraform destroy -auto-approve
-terraform workspace select staging && terraform destroy -auto-approve
-terraform workspace select prod && terraform destroy -auto-approve
+terraform workspace select dev && terraform destroy -var-file=environments/dev.tfvars
+terraform workspace select staging && terraform destroy -var-file=environments/staging.tfvars
+terraform workspace select prod && terraform destroy -var-file=environments/prod.tfvars
 terraform workspace select default
 ```
 
