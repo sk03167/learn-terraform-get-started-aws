@@ -24,7 +24,7 @@ data "aws_iam_policy_document" "github_jobs_publisher_assume_role" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:sk03167/data-platform-jobs:ref:refs/heads/dev"]
+      values = ["repo:sk03167/data-platform-jobs:ref:refs/heads/main"]
     }
   }
 }
